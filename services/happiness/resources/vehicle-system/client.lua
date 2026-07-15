@@ -1,18 +1,66 @@
+---@class VehicleProfile
+---@field name string Driver-facing model name used by telemetry.
+---@field idleRpm number Approximate idle speed used to convert normalized native revs to RPM.
+---@field redlineRpm number Approximate maximum engine speed used for the RPM display.
+
+---@class VehicleProfileOverride
+---@field name? string Optional telemetry name replacement.
+---@field idleRpm? number Optional model-specific idle RPM.
+---@field redlineRpm? number Optional model-specific redline RPM.
+
+---@class VehicleTransmissionState
+---@field vehicle number HappinessMP handle of the car currently controlled by this client.
+---@field profile VehicleProfile Resolved generic or model-specific display profile.
+---@field selectedGear number Manual selection: -1 is reverse, 0 is neutral, and positive values are forward gears.
+---@field highGear number Highest native forward gear accepted for this car.
+---@field originalHighGear number Native high-gear value restored when manual control ends.
+---@field ratios table<number, number> Original native ratio for reverse/standing gear 0 and every forward gear.
+---@field ratiosDisconnected boolean Whether ratios currently contain the synthetic clutch value.
+---@field clutchPressed boolean Current frame's clutch input state.
+---@field previousClutchPressed boolean Previous frame's clutch state, used to detect release.
+---@field engineRunning boolean Resource-owned ignition state because no documented getter is available.
+---@field stalled boolean Whether the most recent engine stop was caused by drivetrain load.
+---@field status string Temporary telemetry status text.
+---@field statusUntil number Game timer at which temporary status text expires.
+---@field shiftLockedUntil number Game timer before another shift attempt is accepted.
+---@field stallCandidateSince number|nil Time at which stationary in-gear load first became stall-worthy.
+---@field stallGraceUntil number Grace-period end after clutch release.
+
+--- Immutable resource settings loaded first from config.lua.
+---@type table
 local config <const> = VehicleSystemConfig
 
+--- Model-hash keyed explicit profile overrides, such as the Sentinel calibration.
+---@type table<number, VehicleProfileOverride>
 local vehicleOverrides = {}
+
+--- Model-hash keyed resolved profiles; caching avoids classification and allocation every frame.
+---@type table<number, VehicleProfile>
 local vehicleProfiles = {}
+
+--- Set of non-car or invalid-drivetrain model hashes that must remain on vanilla handling.
+---@type table<number, boolean>
 local invalidVehicleModels = {}
+
+--- Runtime state for the one car currently driven by the local player.
+---@type VehicleTransmissionState|nil
 local active = nil
 
+--- Handle of the always-visible CEF telemetry browser.
+---@type number|nil
 local webui = nil
-local webuiReady = false
-local lastUiUpdate = 0
-local lastUiSnapshot = nil
 
-local debugVehicle = nil
-local debugSpawnStarted = false
-local debugSpawned = false
+--- Prevents WebUI events from being sent before CEF has loaded the page.
+---@type boolean
+local webuiReady = false
+
+--- Game timer of the latest telemetry event, used to enforce the configured update rate.
+---@type number
+local lastUiUpdate = 0
+
+--- Serialized previous telemetry payload, used to suppress duplicate WebUI updates.
+---@type string|nil
+local lastUiSnapshot = nil
 
 --- Restricts a numeric value to an inclusive range.
 --- Centralizing this keeps gear bounds and normalized telemetry calculations readable.
@@ -143,6 +191,7 @@ end
 ---@param profile table Resolved RPM and display profile for the model.
 ---@return boolean captured
 local function captureVehicle(vehicle, profile)
+    -- The native value defines how many forward positions this particular model supports.
     local highGear = Game.GetVehicleHighGear(vehicle)
     local highGearIsValid = isFiniteNumber(highGear)
         and highGear == math.floor(highGear)
@@ -153,6 +202,8 @@ local function captureVehicle(vehicle, profile)
         return false
     end
 
+    -- Preserve every native ratio before the synthetic clutch is allowed to replace them.
+    ---@type table<number, number>
     local ratios = {}
     for gear = 0, highGear do
         local ratio = Game.GetVehicleGearRatio(vehicle, gear)
@@ -528,60 +579,6 @@ local function destroyWebUI()
     lastUiSnapshot = nil
 end
 
---- Loads and spawns the configured networked debug car beside the local player once.
---- The guard prevents duplicate cars from playerSpawn and delayed fallback racing each other.
-local function spawnDebugVehicle()
-    if debugSpawnStarted or debugSpawned or not config.debugVehicle.enabled then
-        return
-    end
-
-    debugSpawnStarted = true
-
-    local model = Game.GetHashKey(config.debugVehicle.model)
-    if not Game.IsModelInCdimage(model) then
-        Console.Log("vehicle-system: invalid debug vehicle model " .. config.debugVehicle.model)
-        debugSpawnStarted = false
-        return
-    end
-
-    Game.RequestModel(model)
-    while not Game.HasModelLoaded(model) do
-        Game.RequestModel(model)
-        Thread.Pause(0)
-    end
-
-    local playerChar = Game.GetPlayerChar(Game.GetPlayerId())
-    local x, y, z = Game.GetCharCoordinates(playerChar)
-    local heading = Game.GetCharHeading(playerChar)
-    local radians = math.rad(heading)
-
-    -- GTA headings use local right as this horizontal perpendicular.
-    x = x + math.cos(radians) * config.debugVehicle.rightOffset
-    y = y - math.sin(radians) * config.debugVehicle.rightOffset
-
-    debugVehicle = Game.CreateCar(model, x, y, z, true)
-    Game.SetCarHeading(debugVehicle, heading)
-    Game.SetCarOnGroundProperly(debugVehicle)
-    Game.SetVehicleDirtLevel(debugVehicle, 0.0)
-    Game.WashVehicleTextures(debugVehicle, 255)
-    Game.SetCarEngineOn(debugVehicle, false, true)
-
-    Game.MarkModelAsNoLongerNeeded(model)
-
-    debugSpawned = true
-    debugSpawnStarted = false
-end
-
---- Deletes the debug vehicle if it still exists.
---- Only the resource-owned test car is removed; normal world and player cars are untouched.
-local function destroyDebugVehicle()
-    if vehicleExists(debugVehicle) then
-        Game.DeleteCar(debugVehicle)
-    end
-
-    debugVehicle = nil
-end
-
 --- Hashes configured model-name overrides once for constant-time runtime profile lookup.
 --- Generic cars do not need entries because resolveCarProfile supplies the default profile.
 local function initializeVehicleOverrides()
@@ -590,7 +587,7 @@ local function initializeVehicleOverrides()
     end
 end
 
---- Initializes caches/UI and starts the client-side vehicle management threads.
+--- Initializes caches/UI and starts the client-side vehicle management loop.
 --- scriptInit runs after the client has joined and all resource scripts are loaded.
 Events.Subscribe("scriptInit", function()
     initializeVehicleOverrides()
@@ -609,33 +606,6 @@ Events.Subscribe("scriptInit", function()
             Thread.Pause(0)
         end
     end)
-
-    -- playerSpawn is the normal path. This fallback also supports restarting
-    -- vehicle-system while the player is already alive.
-    --- Waits for a valid live player before using the resource-restart debug spawn fallback.
-    --- The normal playerSpawn path usually wins; shared guards keep the operation idempotent.
-    Thread.Create(function()
-        Thread.Pause(config.debugVehicle.fallbackDelayMs)
-
-        while config.debugVehicle.enabled do
-            local playerId = Game.GetPlayerId()
-            local playerChar = Game.GetPlayerChar(playerId)
-
-            if Game.IsNetworkPlayerActive(playerId) and not Game.IsCharFatallyInjured(playerChar) then
-                break
-            end
-
-            Thread.Pause(250)
-        end
-
-        spawnDebugVehicle()
-    end)
-end)
-
---- Requests the one-time debug car after the gamemode finishes spawning the player.
---- The actual spawn work remains in spawnDebugVehicle so all entry paths share one guard.
-Events.Subscribe("playerSpawn", function()
-    Thread.Create(spawnDebugVehicle)
 end)
 
 --- Marks this resource's CEF instance ready and immediately publishes initial telemetry.
@@ -655,6 +625,5 @@ Events.Subscribe("resourceStop", function(resourceName)
     end
 
     releaseActiveVehicle()
-    destroyDebugVehicle()
     destroyWebUI()
 end)
