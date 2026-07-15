@@ -12,6 +12,8 @@ VehicleSystemConfig = {
 
     transmission = {
         disconnectedRatio = 0.0001,
+        minimumHighGear = 1,
+        maximumHighGear = 8,
         shiftLockMs = 400,
         grindStatusMs = 600,
         messageStatusMs = 900,
@@ -37,12 +39,16 @@ VehicleSystemConfig = {
         fallbackDelayMs = 5000
     },
 
-    vehicles = {
+    defaultCarProfile = {
+        idleRpm = 800,
+        redlineRpm = 7000
+    },
+
+    vehicleOverrides = {
         SENTINEL = {
             name = "SENTINEL",
             idleRpm = 800,
-            redlineRpm = 7000,
-            fallbackHighGear = 5
+            redlineRpm = 7000
         }
     }
 }

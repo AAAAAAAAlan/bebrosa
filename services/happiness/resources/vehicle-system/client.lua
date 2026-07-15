@@ -1,6 +1,8 @@
 local config <const> = VehicleSystemConfig
 
-local supportedVehicles = {}
+local vehicleOverrides = {}
+local vehicleProfiles = {}
+local invalidVehicleModels = {}
 local active = nil
 
 local webui = nil
@@ -12,14 +14,36 @@ local debugVehicle = nil
 local debugSpawnStarted = false
 local debugSpawned = false
 
+--- Restricts a numeric value to an inclusive range.
+--- Centralizing this keeps gear bounds and normalized telemetry calculations readable.
+---@param value number Value to constrain.
+---@param minimum number Lowest permitted value.
+---@param maximum number Highest permitted value.
+---@return number constrainedValue
 local function clamp(value, minimum, maximum)
     return math.max(minimum, math.min(maximum, value))
 end
 
+--- Reports whether a value is a usable finite Lua number.
+--- Native drivetrain data is validated with this before it can modify a vehicle.
+---@param value any Value returned by a native or supplied by configuration.
+---@return boolean isFinite
+local function isFiniteNumber(value)
+    return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
+--- Checks that a vehicle handle is non-nil and still owned by the game.
+--- Handles can become stale after deletion, streaming changes, or resource shutdown.
+---@param vehicle number|nil HappinessMP vehicle handle.
+---@return boolean exists
 local function vehicleExists(vehicle)
     return vehicle ~= nil and Game.DoesVehicleExist(vehicle)
 end
 
+--- Sets a temporary status message for the active vehicle.
+--- Timed statuses keep input errors visible without permanently replacing READY or STALLED.
+---@param text string Text sent to the debug WebUI.
+---@param duration number Visibility duration in milliseconds.
 local function setStatus(text, duration)
     if active == nil then
         return
@@ -29,6 +53,9 @@ local function setStatus(text, duration)
     active.statusUntil = Game.GetGameTimer() + duration
 end
 
+--- Resolves the status that should currently be shown by the debug WebUI.
+--- Persistent drivetrain state is used after any transient message expires.
+---@return string status
 local function currentStatus()
     if active == nil then
         return "INACTIVE"
@@ -45,6 +72,10 @@ local function currentStatus()
     return "READY"
 end
 
+--- Converts the internal gear number into a driver-facing label.
+--- The state machine uses -1 for reverse and 0 for synthetic neutral.
+---@param gear number Internal selected gear.
+---@return string label
 local function gearLabel(gear)
     if gear == -1 then
         return "R"
@@ -55,6 +86,9 @@ local function gearLabel(gear)
     return tostring(gear)
 end
 
+--- Restores every native ratio captured before manual control began.
+--- This prevents the synthetic clutch ratio from leaking into vanilla handling.
+---@param state table Active vehicle transmission state.
 local function restoreRatios(state)
     if not state.ratiosDisconnected or not vehicleExists(state.vehicle) then
         return
@@ -70,6 +104,9 @@ local function restoreRatios(state)
     state.ratiosDisconnected = false
 end
 
+--- Replaces captured ratios with a tiny nonzero value to disconnect engine drive.
+--- GTA IV has no documented neutral setter, so this implements clutch and neutral behavior.
+---@param state table Active vehicle transmission state.
 local function disconnectRatios(state)
     if state.ratiosDisconnected or not vehicleExists(state.vehicle) then
         return
@@ -84,6 +121,8 @@ local function disconnectRatios(state)
     state.ratiosDisconnected = true
 end
 
+--- Releases the currently managed vehicle and restores its original drivetrain data.
+--- It is called on exit, driver changes, unsupported models, and resource shutdown.
 local function releaseActiveVehicle()
     if active == nil then
         return
@@ -98,18 +137,33 @@ local function releaseActiveVehicle()
     active = nil
 end
 
+--- Validates and captures one car before enabling manual transmission control.
+--- Returning false leaves unfamiliar or malformed vehicle models on vanilla handling.
+---@param vehicle number HappinessMP vehicle handle.
+---@param profile table Resolved RPM and display profile for the model.
+---@return boolean captured
 local function captureVehicle(vehicle, profile)
-    releaseActiveVehicle()
-
     local highGear = Game.GetVehicleHighGear(vehicle)
-    if highGear == nil or highGear < 1 then
-        highGear = profile.fallbackHighGear
+    local highGearIsValid = isFiniteNumber(highGear)
+        and highGear == math.floor(highGear)
+        and highGear >= config.transmission.minimumHighGear
+        and highGear <= config.transmission.maximumHighGear
+
+    if not highGearIsValid then
+        return false
     end
 
     local ratios = {}
     for gear = 0, highGear do
-        ratios[gear] = Game.GetVehicleGearRatio(vehicle, gear)
+        local ratio = Game.GetVehicleGearRatio(vehicle, gear)
+        if not isFiniteNumber(ratio) or math.abs(ratio) <= config.transmission.disconnectedRatio then
+            return false
+        end
+
+        ratios[gear] = ratio
     end
+
+    releaseActiveVehicle()
 
     active = {
         vehicle = vehicle,
@@ -133,8 +187,47 @@ local function captureVehicle(vehicle, profile)
     disconnectRatios(active)
     Game.SetVehicleGear(vehicle, 1)
     Game.SetCarEngineOn(vehicle, false, true)
+
+    return true
 end
 
+--- Resolves and caches a manual-transmission profile for a GTA IV car model.
+--- Explicit model overrides win; otherwise the generic car profile is used.
+---@param model number GTA IV model hash.
+---@return table|nil profile Nil for bikes, boats, aircraft, trains, or rejected models.
+local function resolveCarProfile(model)
+    if invalidVehicleModels[model] then
+        return nil
+    end
+
+    if vehicleProfiles[model] ~= nil then
+        return vehicleProfiles[model]
+    end
+
+    if not Game.IsThisModelACar(model) then
+        invalidVehicleModels[model] = true
+        return nil
+    end
+
+    local defaults = config.defaultCarProfile
+    local override = vehicleOverrides[model] or {}
+    local displayName = Game.GetDisplayNameFromVehicleModel(model)
+
+    local profile = {
+        name = override.name or displayName or "CAR",
+        idleRpm = override.idleRpm or defaults.idleRpm,
+        redlineRpm = override.redlineRpm or defaults.redlineRpm
+    }
+
+    vehicleProfiles[model] = profile
+    return profile
+end
+
+--- Finds the local player's current car only when they occupy its driver seat.
+--- Restricting work to the local driver avoids modifying AI, passengers, or world vehicles.
+---@return number|nil vehicle
+---@return table|nil profile
+---@return number|nil model
 local function getSupportedDrivenVehicle()
     local playerChar = Game.GetPlayerChar(Game.GetPlayerId())
     if not Game.IsCharSittingInAnyCar(playerChar) then
@@ -146,11 +239,14 @@ local function getSupportedDrivenVehicle()
         return nil, nil
     end
 
-    return vehicle, supportedVehicles[Game.GetCarModel(vehicle)]
+    local model = Game.GetCarModel(vehicle)
+    return vehicle, resolveCarProfile(model), model
 end
 
+--- Activates, switches, or releases manual control as the local driver changes vehicles.
+--- Invalid native gear data is cached by model so failed capture is not retried every frame.
 local function updateActiveVehicle()
-    local vehicle, profile = getSupportedDrivenVehicle()
+    local vehicle, profile, model = getSupportedDrivenVehicle()
 
     if vehicle == nil or profile == nil then
         releaseActiveVehicle()
@@ -158,10 +254,17 @@ local function updateActiveVehicle()
     end
 
     if active == nil or active.vehicle ~= vehicle then
-        captureVehicle(vehicle, profile)
+        if not captureVehicle(vehicle, profile) then
+            releaseActiveVehicle()
+            invalidVehicleModels[model] = true
+            Console.Log("vehicle-system: leaving model " .. tostring(model) .. " on vanilla handling because its gear data is invalid")
+        end
     end
 end
 
+--- Attempts to move the selected gearbox position by one step.
+--- Clutchless attempts are rejected and produce the configured grind feedback and lockout.
+---@param direction number Use 1 to shift up or -1 to shift down.
 local function shift(direction)
     local now = Game.GetGameTimer()
     if active == nil or now < active.shiftLockedUntil then
@@ -178,6 +281,8 @@ local function shift(direction)
     active.stallCandidateSince = nil
 end
 
+--- Toggles the active car's engine when clutch is held and neutral is selected.
+--- Requiring neutral prevents ignition changes from bypassing the stall model.
 local function toggleIgnition()
     if active == nil or not active.clutchPressed then
         return
@@ -196,6 +301,8 @@ local function toggleIgnition()
     setStatus(active.engineRunning and "ENGINE START" or "ENGINE STOP", config.transmission.messageStatusMs)
 end
 
+--- Samples clutch, ignition, and sequential shift keys for the current frame.
+--- It also starts the post-clutch stall grace period on clutch release.
 local function updateInput()
     if active == nil then
         return
@@ -219,6 +326,8 @@ local function updateInput()
     end
 end
 
+--- Applies synthetic clutch/neutral ratios and reasserts the selected physical gear.
+--- Reassertion prevents GTA IV's automatic gearbox from silently choosing another gear.
 local function applyTransmission()
     if active == nil then
         return
@@ -243,6 +352,8 @@ local function applyTransmission()
     end
 end
 
+--- Prevents W/S from driving through zero in a direction forbidden by the selected gear.
+--- Braking and neutral coasting remain available; only the zero-speed crossover is clamped.
 local function enforceSelectedDirection()
     if active == nil then
         return
@@ -273,6 +384,8 @@ local function enforceSelectedDirection()
     end
 end
 
+--- Stalls a running engine that remains near stationary in gear with the clutch released.
+--- The timer and grace period avoid false stalls during a valid clutch-assisted launch.
 local function updateStall()
     if active == nil or not active.engineRunning then
         if active ~= nil then
@@ -306,6 +419,16 @@ local function updateStall()
     end
 end
 
+--- Builds the compact primitive telemetry payload consumed by the WebUI.
+--- Primitive return values avoid relying on table serialization across the CEF event bridge.
+---@return string vehicleName
+---@return string gear
+---@return number rpm
+---@return string ratio
+---@return string clutch
+---@return string engine
+---@return string status
+---@return number signedSpeedKmh
 local function telemetry()
     if active == nil then
         return "INACTIVE", "-", 0, "-", "RELEASED", "OFF", "INACTIVE", 0
@@ -340,6 +463,9 @@ local function telemetry()
         speed
 end
 
+--- Sends telemetry to CEF at a limited rate and suppresses identical snapshots.
+--- This keeps the always-visible widget inexpensive compared with the per-frame physics loop.
+---@param force boolean When true, bypass rate and duplicate checks for initial display.
 local function updateWebUI(force)
     if webui == nil then
         return
@@ -372,6 +498,8 @@ local function updateWebUI(force)
     })
 end
 
+--- Creates and positions the transparent, non-focused vehicle debug WebUI.
+--- The widget never takes keyboard focus, so transmission controls continue reaching the game.
 local function createWebUI()
     if webui ~= nil then
         return
@@ -387,6 +515,8 @@ local function createWebUI()
     )
 end
 
+--- Destroys the WebUI and clears readiness/snapshot state.
+--- Resetting all local state makes resource restarts create a clean browser instance.
 local function destroyWebUI()
     if webui == nil then
         return
@@ -398,6 +528,8 @@ local function destroyWebUI()
     lastUiSnapshot = nil
 end
 
+--- Loads and spawns the configured networked debug car beside the local player once.
+--- The guard prevents duplicate cars from playerSpawn and delayed fallback racing each other.
 local function spawnDebugVehicle()
     if debugSpawnStarted or debugSpawned or not config.debugVehicle.enabled then
         return
@@ -440,6 +572,8 @@ local function spawnDebugVehicle()
     debugSpawnStarted = false
 end
 
+--- Deletes the debug vehicle if it still exists.
+--- Only the resource-owned test car is removed; normal world and player cars are untouched.
 local function destroyDebugVehicle()
     if vehicleExists(debugVehicle) then
         Game.DeleteCar(debugVehicle)
@@ -448,16 +582,22 @@ local function destroyDebugVehicle()
     debugVehicle = nil
 end
 
-local function initializeSupportedVehicles()
-    for modelName, profile in pairs(config.vehicles) do
-        supportedVehicles[Game.GetHashKey(modelName)] = profile
+--- Hashes configured model-name overrides once for constant-time runtime profile lookup.
+--- Generic cars do not need entries because resolveCarProfile supplies the default profile.
+local function initializeVehicleOverrides()
+    for modelName, profile in pairs(config.vehicleOverrides) do
+        vehicleOverrides[Game.GetHashKey(modelName)] = profile
     end
 end
 
+--- Initializes caches/UI and starts the client-side vehicle management threads.
+--- scriptInit runs after the client has joined and all resource scripts are loaded.
 Events.Subscribe("scriptInit", function()
-    initializeSupportedVehicles()
+    initializeVehicleOverrides()
     createWebUI()
 
+    --- Runs manual transmission physics and telemetry for the local driver every frame.
+    --- Only the current driven car is touched, so enabling all car models does not scan the world.
     Thread.Create(function()
         while true do
             updateActiveVehicle()
@@ -472,6 +612,8 @@ Events.Subscribe("scriptInit", function()
 
     -- playerSpawn is the normal path. This fallback also supports restarting
     -- vehicle-system while the player is already alive.
+    --- Waits for a valid live player before using the resource-restart debug spawn fallback.
+    --- The normal playerSpawn path usually wins; shared guards keep the operation idempotent.
     Thread.Create(function()
         Thread.Pause(config.debugVehicle.fallbackDelayMs)
 
@@ -490,10 +632,14 @@ Events.Subscribe("scriptInit", function()
     end)
 end)
 
+--- Requests the one-time debug car after the gamemode finishes spawning the player.
+--- The actual spawn work remains in spawnDebugVehicle so all entry paths share one guard.
 Events.Subscribe("playerSpawn", function()
     Thread.Create(spawnDebugVehicle)
 end)
 
+--- Marks this resource's CEF instance ready and immediately publishes initial telemetry.
+---@param webuiId number WebUI handle supplied by HappinessMP.
 Events.Subscribe("webUIReady", function(webuiId)
     if webuiId == webui then
         webuiReady = true
@@ -501,6 +647,8 @@ Events.Subscribe("webUIReady", function(webuiId)
     end
 end)
 
+--- Restores the active drivetrain and removes all resource-owned client objects on shutdown.
+---@param resourceName string Name of the resource being stopped.
 Events.Subscribe("resourceStop", function(resourceName)
     if resourceName ~= config.resourceName then
         return
