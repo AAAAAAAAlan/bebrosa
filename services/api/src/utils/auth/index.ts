@@ -9,7 +9,15 @@ const adminUserIds = (process.env.ADMIN_USER_IDS ?? "")
   .map((id) => id.trim())
   .filter(Boolean);
 
+const trustedOrigins = (
+  process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "http://localhost:3001"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export const auth = betterAuth({
+  trustedOrigins,
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema,

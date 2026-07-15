@@ -28,6 +28,8 @@ The server listens on <http://localhost:3000>.
 Better Auth 1.7 is mounted at `/api/auth/*`. Discord is the only enabled sign-in
 provider. Configure the Discord application's OAuth redirect URI as
 `http://localhost:3000/api/auth/callback/discord` for local development.
+The UI runs on `http://localhost:3001` during development; add any other
+frontend origins to the comma-separated `BETTER_AUTH_TRUSTED_ORIGINS` setting.
 
 Start a Discord login with `POST /api/auth/sign-in/social` and a JSON body of
 `{"provider":"discord"}`. Better Auth's admin plugin endpoints are available
