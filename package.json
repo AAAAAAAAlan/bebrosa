@@ -1,0 +1,19 @@
+{
+  "name": "happinessmp-monorepo",
+  "private": true,
+  "packageManager": "bun@1.4.0",
+  "scripts": {
+    "server:start": "cd services/happiness && ./HappinessMP.Server.exe",
+    "ui:dev": "bun run --cwd services/ui dev",
+    "ui:build": "bun run --cwd services/ui build",
+    "ui:preview": "bun run --cwd services/ui preview",
+    "ui:test": "bun run --cwd services/ui test",
+    "ui:lint": "bun run --cwd services/ui lint",
+    "ui:check": "bun run --cwd services/ui check"
+  },
+  "workspaces": [
+    "services/api",
+    "services/ui",
+    "packages/*"
+  ]
+}

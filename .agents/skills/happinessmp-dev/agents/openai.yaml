@@ -1,0 +1,4 @@
+interface:
+  display_name: "HappinessMP Developer"
+  short_description: "Build and troubleshoot HappinessMP projects"
+  default_prompt: "Use $happinessmp-dev to build or troubleshoot a HappinessMP server, resource, addon, WebUI, or script."

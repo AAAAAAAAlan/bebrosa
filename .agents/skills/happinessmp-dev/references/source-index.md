@@ -1,0 +1,75 @@
+# Official Source Index
+
+Sitemap: https://happinessmp.net/sitemap.xml
+Fetched: 2026-07-12
+Pages: 69
+
+- [blog](https://happinessmp.net/blog) → `release-history.md`
+- [archive](https://happinessmp.net/blog/archive) → `release-history.md`
+- [Authors](https://happinessmp.net/blog/authors) → `release-history.md`
+- [tags](https://happinessmp.net/blog/tags) → `release-history.md`
+- [addons](https://happinessmp.net/blog/tags/addons) → `release-history.md`
+- [client](https://happinessmp.net/blog/tags/client) → `release-history.md`
+- [discord](https://happinessmp.net/blog/tags/discord) → `release-history.md`
+- [docs](https://happinessmp.net/blog/tags/docs) → `release-history.md`
+- [fusionfix](https://happinessmp.net/blog/tags/fusionfix) → `release-history.md`
+- [future](https://happinessmp.net/blog/tags/future) → `release-history.md`
+- [goals](https://happinessmp.net/blog/tags/goals) → `release-history.md`
+- [launcher](https://happinessmp.net/blog/tags/launcher) → `release-history.md`
+- [linux](https://happinessmp.net/blog/tags/linux) → `release-history.md`
+- [redesign](https://happinessmp.net/blog/tags/redesign) → `release-history.md`
+- [scripting](https://happinessmp.net/blog/tags/scripting) → `release-history.md`
+- [server](https://happinessmp.net/blog/tags/server) → `release-history.md`
+- [update](https://happinessmp.net/blog/tags/update) → `release-history.md`
+- [Server Release](https://happinessmp.net/blog/update-02-08) → `release-history.md`
+- [HappinessMP Update 2.3](https://happinessmp.net/blog/update-03-05) → `release-history.md`
+- [HappinessMP Update 1.9](https://happinessmp.net/blog/update-04-10) → `release-history.md`
+- [HappinessMP Update 1.4](https://happinessmp.net/blog/update-04-16) → `release-history.md`
+- [HappinessMP Update 2.5](https://happinessmp.net/blog/update-06-23) → `release-history.md`
+- [New launcher, new projekt goals and more](https://happinessmp.net/blog/update-11-23) → `release-history.md`
+- [HappinessMP – Community Guidelines](https://happinessmp.net/guidelines) → `policies.md`
+- [HappinessMP – Server Operator Policy](https://happinessmp.net/server-policy) → `policies.md`
+- [HappinessMP – Terms of Service](https://happinessmp.net/tos) → `policies.md`
+- [Welcome to HappinessMP](https://happinessmp.net/docs/about) → `setup-and-server.md`
+- [Crash Reports and Your Privacy](https://happinessmp.net/docs/crash-reports) → `setup-and-server.md`
+- [Animations](https://happinessmp.net/docs/game/anims) → `game-reference.md`
+- [Blips](https://happinessmp.net/docs/game/blips) → `game-reference.md`
+- [Checkpoints](https://happinessmp.net/docs/game/checkpoints) → `game-reference.md`
+- [Hud](https://happinessmp.net/docs/game/hud) → `game-reference.md`
+- [Keys](https://happinessmp.net/docs/game/keys) → `game-reference.md`
+- [MLOs](https://happinessmp.net/docs/game/mlos) → `game-reference.md`
+- [Peds](https://happinessmp.net/docs/game/models/peds) → `game-models.md`
+- [Peds TBOGT](https://happinessmp.net/docs/game/models/peds-tbogt) → `game-models.md`
+- [Peds TLAD](https://happinessmp.net/docs/game/models/peds-tlad) → `game-models.md`
+- [Vehicles](https://happinessmp.net/docs/game/models/vehicles) → `game-models.md`
+- [Vehicles TBOGT](https://happinessmp.net/docs/game/models/vehicles-tbogt) → `game-models.md`
+- [Vehicles TLAD](https://happinessmp.net/docs/game/models/vehicles-tlad) → `game-models.md`
+- [Ped](https://happinessmp.net/docs/game/ped) → `game-reference.md`
+- [Vehicle](https://happinessmp.net/docs/game/vehicle) → `game-reference.md`
+- [Weapons](https://happinessmp.net/docs/game/weapons) → `game-reference.md`
+- [Weather](https://happinessmp.net/docs/game/weather) → `game-reference.md`
+- [Getting Started](https://happinessmp.net/docs/getting-started) → `setup-and-server.md`
+- [intro](https://happinessmp.net/docs/intro) → `setup-and-server.md`
+- [Addon](https://happinessmp.net/docs/scripting/addon) → `scripting-guides.md`
+- [Events](https://happinessmp.net/docs/scripting/events) → `scripting-guides.md`
+- [Exports](https://happinessmp.net/docs/scripting/exports) → `scripting-guides.md`
+- [Chat](https://happinessmp.net/docs/scripting/functions/chat) → `api-core.md`
+- [Console](https://happinessmp.net/docs/scripting/functions/console) → `api-core.md`
+- [Database](https://happinessmp.net/docs/scripting/functions/database) → `api-services.md`
+- [Events](https://happinessmp.net/docs/scripting/functions/events) → `api-core.md`
+- [Game](https://happinessmp.net/docs/scripting/functions/game) → `api-gameplay.md`
+- [HTTP](https://happinessmp.net/docs/scripting/functions/http) → `api-services.md`
+- [Player](https://happinessmp.net/docs/scripting/functions/player) → `api-gameplay.md`
+- [Resource](https://happinessmp.net/docs/scripting/functions/resource) → `api-core.md`
+- [Server](https://happinessmp.net/docs/scripting/functions/server) → `api-core.md`
+- [Session](https://happinessmp.net/docs/scripting/functions/session) → `api-core.md`
+- [Text](https://happinessmp.net/docs/scripting/functions/text) → `api-services.md`
+- [Thread](https://happinessmp.net/docs/scripting/functions/thread) → `api-services.md`
+- [Timer](https://happinessmp.net/docs/scripting/functions/timer) → `api-services.md`
+- [WebUI](https://happinessmp.net/docs/scripting/functions/webui) → `api-gameplay.md`
+- [Resource](https://happinessmp.net/docs/scripting/resource) → `scripting-guides.md`
+- [WebUI](https://happinessmp.net/docs/scripting/webui) → `scripting-guides.md`
+- [Console Commands](https://happinessmp.net/docs/server/commands) → `setup-and-server.md`
+- [Getting Started](https://happinessmp.net/docs/server/getting-started) → `setup-and-server.md`
+- [Settings](https://happinessmp.net/docs/server/settings) → `setup-and-server.md`
+- [HappinessMP](https://happinessmp.net/) → `project-overview.md`

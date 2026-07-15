@@ -1,0 +1,7 @@
+<meta type="lua">
+	<script type="client" src="cmds.lua" />
+	<script type="client" src="blips.lua" />
+	<script type="client" src="spawn.lua" />
+	<script type="client" src="client.lua" />
+	<script type="server" src="server.lua" />
+</meta>
