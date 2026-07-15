@@ -1,0 +1,8 @@
+<meta type="lua">
+    <script type="client" src="config.lua" />
+    <script type="client" src="client.lua" />
+
+    <file src="ui/index.html" />
+    <file src="ui/style.css" />
+    <file src="ui/app.js" />
+</meta>

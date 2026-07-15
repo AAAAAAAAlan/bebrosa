@@ -33,6 +33,7 @@
     <!-- The resources the server will load and run. -->
     <resource>lua-gamemode</resource>
     <resource>debug-ui</resource>
+    <resource>vehicle-system</resource>
     <!--<resource>squirrel-gamemode</resource>-->
 
     <!-- The addons the server will load and run. -->
