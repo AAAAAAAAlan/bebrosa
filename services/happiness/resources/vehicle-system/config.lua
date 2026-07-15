@@ -5,7 +5,9 @@ VehicleSystemConfig = {
         clutch = 42,    -- Left Shift
         shiftDown = 16, -- Q
         shiftUp = 18,   -- E
-        ignition = 19   -- R (used together with the clutch)
+        ignition = 19,  -- R (used together with the clutch)
+        accelerate = 17, -- W
+        brakeReverse = 31 -- S
     },
 
     transmission = {
@@ -16,7 +18,7 @@ VehicleSystemConfig = {
         stallDelayMs = 400,
         stallGraceMs = 350,
         stallSpeed = 0.5,
-        stallRevs = 0.18
+        directionLockSpeed = 0.25
     },
 
     ui = {

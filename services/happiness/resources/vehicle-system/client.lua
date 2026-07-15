@@ -243,6 +243,36 @@ local function applyTransmission()
     end
 end
 
+local function enforceSelectedDirection()
+    if active == nil then
+        return
+    end
+
+    local _, forwardSpeed = Game.GetCarSpeedVector(active.vehicle, true)
+    local acceleratePressed = Game.IsGameKeyboardKeyPressed(config.keys.accelerate)
+    local brakeReversePressed = Game.IsGameKeyboardKeyPressed(config.keys.brakeReverse)
+    local lockSpeed = config.transmission.directionLockSpeed
+    local disconnected = active.clutchPressed or active.selectedGear == 0
+    local forbidden = false
+
+    if disconnected then
+        -- Preserve coasting in neutral or with the clutch down, but stop W/S
+        -- from creating drive as the vehicle reaches zero.
+        forbidden = math.abs(forwardSpeed) <= lockSpeed
+            and (acceleratePressed or brakeReversePressed)
+    elseif active.selectedGear == -1 then
+        -- In reverse, W remains available as a brake while rolling backward.
+        forbidden = acceleratePressed and forwardSpeed >= -lockSpeed
+    else
+        -- In a forward gear, S remains available as a brake while moving ahead.
+        forbidden = brakeReversePressed and forwardSpeed <= lockSpeed
+    end
+
+    if forbidden then
+        Game.SetCarForwardSpeed(active.vehicle, 0.0)
+    end
+end
+
 local function updateStall()
     if active == nil or not active.engineRunning then
         if active ~= nil then
@@ -253,12 +283,10 @@ local function updateStall()
 
     local now = Game.GetGameTimer()
     local speed = math.abs(Game.GetCarSpeed(active.vehicle))
-    local revs = Game.GetVehicleEngineRevs(active.vehicle)
     local shouldStall = active.selectedGear ~= 0
         and not active.clutchPressed
         and now >= active.stallGraceUntil
         and speed < config.transmission.stallSpeed
-        and revs <= config.transmission.stallRevs
 
     if not shouldStall then
         active.stallCandidateSince = nil
@@ -298,7 +326,9 @@ local function telemetry()
 
     local ratioText = ratio == nil and "-" or string.format("%.4f", ratio)
     local engineText = active.stalled and "STALLED" or (active.engineRunning and "RUNNING" or "OFF")
-    local speed = math.floor(math.abs(Game.GetCarSpeed(active.vehicle)) * 3.6 + 0.5)
+    local _, forwardSpeed = Game.GetCarSpeedVector(active.vehicle, true)
+    local speedKmh = forwardSpeed * 3.6
+    local speed = speedKmh >= 0 and math.floor(speedKmh + 0.5) or math.ceil(speedKmh - 0.5)
 
     return active.profile.name,
         gearLabel(active.selectedGear),
@@ -433,6 +463,7 @@ Events.Subscribe("scriptInit", function()
             updateActiveVehicle()
             updateInput()
             applyTransmission()
+            enforceSelectedDirection()
             updateStall()
             updateWebUI(false)
             Thread.Pause(0)
